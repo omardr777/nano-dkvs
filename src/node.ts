@@ -11,7 +11,7 @@ export class Node {
   private logs:
     | [
         {
-          command: string;
+          userCommand: string;
           term: number;
         }
       ];
@@ -23,7 +23,7 @@ export class Node {
     this.timer = 150;
     this.logs = [
       {
-        command: "",
+        userCommand: "",
         term: -1,
       },
     ];
@@ -38,8 +38,8 @@ export class Node {
         console.log("Data from the client: ", data.toString());
         const requests = this.readRequests(data.toString());
         for (const request of requests) {
-          const [command, key, value] = request.split(" ");
-          const res = this.handleRequest(command, key, value);
+          const [prefix, command, key, value] = request.split(" ");
+          const res = this.handleRequest(prefix, command, key, value);
           console.log("Response to the client: ", res);
           socket.write(res + "\r\n");
         }
@@ -74,9 +74,15 @@ export class Node {
     return data.split("\r\n").filter(request => request !== "");
   }
 
-  appendEntries(command: string) {
+  readDistributed() {}
+
+  appendEntries(userCommand: string) {
+    if (this.state !== "leader") {
+      return;
+    }
+
     this.logs.push({
-      command,
+      userCommand,
       term: 1,
     });
   }
@@ -86,19 +92,43 @@ export class Node {
     const last = this.logs.length - 1;
 
     const client = createConnection({ host, port }, () => {
-      client.write("sync:" + JSON.stringify(this.logs[last]));
+      client.write("dist: " + JSON.stringify(this.logs[last]));
     });
   }
 
   requestAppendEntries(command: string) {
     this.state === "leader" && this.appendEntries(command);
 
+    // TODO: make it parallel
     for (const server of this.store.getServers) {
-      server[1];
+      // this is append rpc
+      this.syncEntries(server);
     }
   }
 
-  handleRequest(command: string, key: string, value: string | number): string {
+  handleRequest(prefix: string, command: string, key: string, value: string) {
+    if (prefix === "dist:") {
+      this.distRequest(command as "append" | "vote", value);
+    } else if (prefix === "user:") {
+      this.userRequest(command, key, value);
+    } else {
+      throw Error("dz omha");
+    }
+  }
+
+  distRequest(command: "append" | "vote", value: string) {
+    switch (command) {
+      case "append": {
+        this.appendEntries(value);
+      }
+      case "vote": {
+        //TODO: implement election
+        return;
+      }
+    }
+  }
+
+  userRequest(command: string, key: string, value: string | number): string {
     switch (command) {
       case "set":
         this.requestAppendEntries(command);
