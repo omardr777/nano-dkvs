@@ -5,6 +5,10 @@ export class Store {
     ["127.0.0.1", 3001],
   ]);
 
+  get getServers() {
+    return this.servers;
+  }
+
   register({ server = "127.0.0.1", port }: { server?: string; port: number }) {
     return this.servers.set(server, port);
   }

@@ -1,11 +1,12 @@
-import { createServer, Server as TCPServer } from "net";
+import { createConnection, createServer, Server as TCPServer } from "net";
 import { Store } from "./store";
+import { State } from "./types/state";
 
 export class Node {
   private server: TCPServer;
   private port: number;
   private store: Store;
-  private state: "leader" | "candidate" | "follower";
+  private state: State;
   private timer: number;
   private logs:
     | [
@@ -13,14 +14,19 @@ export class Node {
           command: string;
           term: number;
         }
-      ]
-    | null = null;
+      ];
 
   constructor(port: number = 8080) {
     this.port = port;
     this.store = new Store();
     this.state = port === 3000 ? "leader" : "follower";
     this.timer = 150;
+    this.logs = [
+      {
+        command: "",
+        term: -1,
+      },
+    ];
 
     // this.store.register({ port: this.port });
     // console.log("Node created with port: ", this.port);
@@ -69,15 +75,33 @@ export class Node {
   }
 
   appendEntries(command: string) {
-    this.logs?.push({
+    this.logs.push({
       command,
       term: 1,
     });
   }
 
+  syncEntries(address: [string, number]) {
+    const [host, port] = address;
+    const last = this.logs.length - 1;
+
+    const client = createConnection({ host, port }, () => {
+      client.write("sync:" + JSON.stringify(this.logs[last]));
+    });
+  }
+
+  requestAppendEntries(command: string) {
+    this.state === "leader" && this.appendEntries(command);
+
+    for (const server of this.store.getServers) {
+      server[1];
+    }
+  }
+
   handleRequest(command: string, key: string, value: string | number): string {
     switch (command) {
       case "set":
+        this.requestAppendEntries(command);
         return this.store.set(key, value) || "OK";
       case "get": {
         const result = this.store.get(key);
