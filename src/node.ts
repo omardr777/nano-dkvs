@@ -9,10 +9,10 @@ export class Node {
   constructor(port: number = 5000) {
     this.port = port;
     this.store = new Store();
-    this.server = createServer((socket) => {
+    this.server = createServer(socket => {
       console.log("Client connected");
 
-      socket.on("data", (data) => {
+      socket.on("data", data => {
         console.log("Data from the client: ", data.toString());
         const requests = this.readRequests(data.toString());
         for (const request of requests) {
@@ -29,7 +29,7 @@ export class Node {
         );
       });
 
-      socket.on("error", (error) => {
+      socket.on("error", error => {
         console.error(error);
       });
     });
@@ -48,7 +48,7 @@ export class Node {
   }
 
   readRequests(data: string) {
-    return data.split("\r\n").filter((request) => request !== "");
+    return data.split("\r\n").filter(request => request !== "");
   }
 
   handleRequest(command: string, key: string, value: string | number): string {
