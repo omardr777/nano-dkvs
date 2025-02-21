@@ -5,10 +5,26 @@ export class Node {
   private server: TCPServer;
   private port: number;
   private store: Store;
+  private state: "leader" | "candidate" | "follower";
+  private timer: number;
+  private logs:
+    | [
+        {
+          command: string;
+          term: number;
+        }
+      ]
+    | null = null;
 
   constructor(port: number = 8080) {
     this.port = port;
     this.store = new Store();
+    this.state = port === 3000 ? "leader" : "follower";
+    this.timer = 150;
+
+    // this.store.register({ port: this.port });
+    // console.log("Node created with port: ", this.port);
+
     this.server = createServer(socket => {
       console.log("Client connected");
 
@@ -24,6 +40,7 @@ export class Node {
       });
 
       socket.on("end", () => {
+        // this.store.unregister({ port: this.port });
         console.log(
           `client with socket address: ${socket.localAddress}-${socket.localPort} has been disconnected!`
         );
@@ -49,6 +66,13 @@ export class Node {
 
   readRequests(data: string) {
     return data.split("\r\n").filter(request => request !== "");
+  }
+
+  appendEntries(command: string) {
+    this.logs?.push({
+      command,
+      term: 1,
+    });
   }
 
   handleRequest(command: string, key: string, value: string | number): string {

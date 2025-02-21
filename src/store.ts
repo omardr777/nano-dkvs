@@ -1,9 +1,22 @@
 export class Store {
   private store = new Map<string, string | number>();
-  private servers = new Map<string, number>();
+  private servers = new Map<string, number>([
+    ["127.0.0.1", 3000],
+    ["127.0.0.1", 3001],
+  ]);
 
-  register(server: string, port: number) {
+  register({ server = "127.0.0.1", port }: { server?: string; port: number }) {
     return this.servers.set(server, port);
+  }
+
+  unregister({
+    server = "127.0.0.1",
+    port,
+  }: {
+    server?: string;
+    port: number;
+  }) {
+    return this.servers.delete(`${server}:${port}`);
   }
 
   set(key: string, value: string | number) {
