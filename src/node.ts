@@ -6,7 +6,7 @@ export class Node {
   private port: number;
   private store: Store;
 
-  constructor(port: number = 5000) {
+  constructor(port: number = 8080) {
     this.port = port;
     this.store = new Store();
     this.server = createServer(socket => {
@@ -63,6 +63,8 @@ export class Node {
         const wasDeleted = this.store.delete(key);
         return wasDeleted ? "Deleted" : "Key not found";
       }
+      case "show":
+        return this.store.show();
       default:
         return "Invalid command";
     }

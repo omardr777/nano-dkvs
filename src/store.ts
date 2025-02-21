@@ -12,4 +12,17 @@ export class Store {
   delete(key: string) {
     return this.store.delete(key);
   }
+
+  show() {
+    if (this.store.size === 0) {
+      return "No data stored";
+    }
+
+    let result = "";
+
+    for (const [key, value] of this.store) {
+      result += `${key}: ${value}\n`;
+    }
+    return result;
+  }
 }
