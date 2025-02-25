@@ -117,20 +117,13 @@ export class Node {
     return availableServers;
   }
 
-  leaderAction<T>(cb: () => T): T | undefined {
-    if (this.state === "leader") {
-      return cb();
-    }
-    return undefined;
-  }
-
   checkMajority(clients: Socket[]): boolean {
     return clients.length >= Math.ceil(this.store.getServers.size / 2);
   }
 
   requestAppendEntries(command: string) {
     // if follower will return undefined
-    const clients = this.leaderAction(this.heartBeat);
+    const clients = this.heartBeat();
 
     // early escape if no clients
     if (!clients) return;
