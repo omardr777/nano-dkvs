@@ -160,6 +160,7 @@ export class Node {
 
   // TODO: this shouldnt exist for followers
   userRequest(command: string, key: string, value: string | number): string {
+    if (this.state !== "leader") return "TODO: proxy req to leader";
     switch (command) {
       case "set":
         this.requestAppendEntries(command);
