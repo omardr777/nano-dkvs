@@ -1,4 +1,9 @@
-import { createConnection, createServer, Server as TCPServer } from "net";
+import {
+  createConnection,
+  createServer,
+  Socket,
+  Server as TCPServer,
+} from "net";
 import { Store } from "./store";
 import { State } from "./types/state";
 
@@ -96,14 +101,46 @@ export class Node {
     });
   }
 
+  heartBeat(): Socket[] {
+    let availableServers = [];
+    for (const server of this.store.getServers) {
+      const [host, port] = server;
+
+      const client = createConnection({ host, port });
+      if (client.writable) {
+        availableServers.push(client);
+      }
+    }
+
+    if (!availableServers) throw new Error("No Available Connections");
+
+    return availableServers;
+  }
+
+  leaderAction<T>(cb: () => T): T | undefined {
+    if (this.state === "leader") {
+      return cb();
+    }
+    return undefined;
+  }
+
+  checkMajority(clients: Socket[]): boolean {
+    return clients.length >= Math.ceil(this.store.getServers.size / 2);
+  }
+
   requestAppendEntries(command: string) {
-    this.state === "leader" && this.appendEntries(command);
+    // if follower will return undefined
+    const clients = this.leaderAction(this.heartBeat);
+
+    // early escape if no clients
+    if (!clients) return;
 
     // TODO: make it parallel
     for (const server of this.store.getServers) {
       // this is append rpc
       this.syncEntries(server);
     }
+    this.state === "leader" && this.appendEntries(command);
   }
 
   handleRequest(prefix: string, command: string, key: string, value: string) {
@@ -128,6 +165,7 @@ export class Node {
     }
   }
 
+  // TODO: this shouldnt exist for followers
   userRequest(command: string, key: string, value: string | number): string {
     switch (command) {
       case "set":
