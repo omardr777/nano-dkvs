@@ -6,6 +6,7 @@ import {
 } from "net";
 import { Store } from "./store";
 import { State } from "./types/state";
+import { Command, DistCommand, UserCommand } from "./types/commands";
 
 export class Node {
   private server: TCPServer;
@@ -44,7 +45,13 @@ export class Node {
         const requests = this.readRequests(data.toString());
         for (const request of requests) {
           const [prefix, command, key, value] = request.split(" ");
-          const res = this.handleRequest(prefix, command, key, value);
+          console.log("prefix: ", prefix);
+          const res = this.handleRequest(
+            prefix,
+            command as Command,
+            key,
+            value
+          );
           console.log("Response to the client: ", res);
           socket.write(res + "\r\n");
         }
@@ -79,17 +86,30 @@ export class Node {
     return data.split("\r\n").filter(request => request !== "");
   }
 
-  readDistributed() {}
-
-  appendEntries(userCommand: string) {
-    if (this.state !== "leader") {
-      return;
-    }
-
+  appendEntries(
+    userCommand: UserCommand,
+    { key, value }: { key: string; value: any }
+  ): string {
     this.logs.push({
       userCommand,
       term: 1,
     });
+    switch (userCommand) {
+      case "set":
+        return this.store.set(key, value) || "OK";
+      case "get": {
+        const result = this.store.get(key);
+        return result ? result.toString() : "Key not found";
+      }
+      case "delete": {
+        const wasDeleted = this.store.delete(key);
+        return wasDeleted ? "Deleted" : "Key not found";
+      }
+      case "show":
+        return this.store.show();
+      default:
+        return "Invalid command";
+    }
   }
 
   syncEntries(address: [string, number]) {
@@ -101,7 +121,7 @@ export class Node {
     });
   }
 
-  heartBeat(): Socket[] {
+  getClients(): Socket[] {
     let availableServers = [];
     for (const server of this.store.getServers) {
       const [host, port] = server;
@@ -121,26 +141,32 @@ export class Node {
     return clients.length >= Math.ceil(this.store.getServers.size / 2);
   }
 
-  requestAppendEntries(command: string) {
+  requestAppendEntries(
+    command: UserCommand,
+    userKeyValue: { key: string; value: any }
+  ): string {
     // if follower will return undefined
-    const clients = this.heartBeat();
+    const clients = this.getClients();
 
-    // early escape if no clients
-    if (!clients) return;
+    if (!this.checkMajority(clients)) {
+      throw new Error("Not enough servers available");
+    }
 
+    const res = this.appendEntries(command, userKeyValue);
     // TODO: make it parallel
     for (const server of this.store.getServers) {
       // this is append rpc
       this.syncEntries(server);
     }
-    this.state === "leader" && this.appendEntries(command);
+    return res;
   }
 
-  handleRequest(prefix: string, command: string, key: string, value: string) {
+  handleRequest(prefix: string, command: Command, key: string, value: string) {
     if (prefix === "dist:") {
-      this.distRequest(command as "append" | "vote", value);
+      this.distRequest(command as DistCommand, value);
     } else if (prefix === "user:") {
-      this.userRequest(command, key, value);
+      console.log("user request", command, key, value);
+      return this.userRequest(command as UserCommand, key, value);
     } else {
       throw Error("dz omha");
     }
@@ -149,7 +175,7 @@ export class Node {
   distRequest(command: "append" | "vote", value: string) {
     switch (command) {
       case "append": {
-        this.appendEntries(value);
+        // this.appendEntries(value);
       }
       case "vote": {
         //TODO: implement election
@@ -159,24 +185,12 @@ export class Node {
   }
 
   // TODO: this shouldnt exist for followers
-  userRequest(command: string, key: string, value: string | number): string {
-    if (this.state !== "leader") return "TODO: proxy req to leader";
-    switch (command) {
-      case "set":
-        this.requestAppendEntries(command);
-        return this.store.set(key, value) || "OK";
-      case "get": {
-        const result = this.store.get(key);
-        return result ? result.toString() : "Key not found";
-      }
-      case "delete": {
-        const wasDeleted = this.store.delete(key);
-        return wasDeleted ? "Deleted" : "Key not found";
-      }
-      case "show":
-        return this.store.show();
-      default:
-        return "Invalid command";
-    }
+  userRequest(
+    command: UserCommand,
+    key: string,
+    value: string | number
+  ): string {
+    // if (this.state !== "leader") return "TODO: proxy req to leader";
+    return this.requestAppendEntries(command, { key, value });
   }
 }
